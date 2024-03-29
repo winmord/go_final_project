@@ -2,12 +2,16 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -27,7 +31,7 @@ func getDbFilePath() string {
 	//dbFilePath := filepath.Join(filepath.Dir(appPath), "scheduler.db")
 	dbFilePath := "scheduler.db"
 
-	envDbFilePath := os.Getenv(" TODO_DBFILE ")
+	envDbFilePath := os.Getenv("TODO_DBFILE")
 	if len(envDbFilePath) > 0 {
 		dbFilePath = envDbFilePath
 	}
@@ -86,12 +90,84 @@ func getPort() int {
 	return port
 }
 
+const datePattern string = "20060102"
+
+func NextDate(now time.Time, date string, repeat string) (string, error) {
+	if repeat == "" {
+		return "", errors.New("repeat is empty string")
+	} else if strings.Contains(repeat, "d ") {
+		days, err := strconv.Atoi(strings.TrimPrefix(repeat, "d "))
+		if err != nil {
+			return "", err
+		}
+		if days > 400 {
+			return "", errors.New("maximum days count must be 400")
+		}
+
+		parsedDate, err := time.Parse(datePattern, date)
+		if err != nil {
+			return "", err
+		}
+
+		newDate := parsedDate.AddDate(0, 0, days)
+
+		for newDate.Before(now) {
+			newDate = newDate.AddDate(0, 0, days)
+		}
+
+		return newDate.Format(datePattern), nil
+	} else if repeat == "y" {
+		parsedDate, err := time.Parse(datePattern, date)
+		if err != nil {
+			return "", err
+		}
+
+		newDate := parsedDate.AddDate(1, 0, 0)
+
+		for newDate.Before(now) {
+			newDate = newDate.AddDate(1, 0, 0)
+		}
+
+		return newDate.Format(datePattern), nil
+	} else {
+		return "", errors.New("repeat wrong format")
+	}
+
+}
+
+func getNextDate(w http.ResponseWriter, r *http.Request) {
+	now, err := time.Parse(datePattern, r.FormValue("now"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf(""), http.StatusBadRequest)
+		return
+	}
+
+	date := r.FormValue("date")
+	repeat := r.FormValue("repeat")
+	nextDate, err := NextDate(now, date, repeat)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf(""), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write([]byte(nextDate))
+
+	if err != nil {
+		http.Error(w, fmt.Errorf("writing tasks data error: %w", err).Error(), http.StatusBadRequest)
+	}
+}
+
 func main() {
 	installDb()
-	webDir := "web"
-	http.Handle("/", http.FileServer(http.Dir(webDir)))
+	webDir := "./web"
 
-	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), nil)
+	r := chi.NewRouter()
+	r.Mount("/", http.FileServer(http.Dir(webDir)))
+	r.Get("/api/nextdate", getNextDate)
+
+	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
 	if err != nil {
 		panic(err)
 	}
