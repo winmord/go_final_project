@@ -33,6 +33,8 @@ func main() {
 	r.Get("/api/nextdate", controller.NextDateReadGET)
 	r.Post("/api/task", controller.TaskAddPOST)
 	r.Get("/api/tasks", controller.TasksReadGET)
+	r.Get("/api/task", controller.TaskReadGET)
+	r.Put("/api/task", controller.TaskUpdatePUT)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
 	if err != nil {

@@ -101,3 +101,33 @@ func ReadTasks() ([]model.Task, error) {
 
 	return tasks, nil
 }
+
+func ReadTask(id string) (model.Task, error) {
+	task := model.Task{}
+	res := db.QueryRow("SELECT * FROM scheduler WHERE id = :id", sql.Named("id", id))
+	err := res.Scan(&task.Id, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	if err != nil {
+		return model.Task{}, err
+	}
+
+	return task, nil
+}
+
+func UpdateTask(task model.Task) (int64, error) {
+	res, err := db.Exec("UPDATE scheduler SET date = :date, title = :title, comment = :comment, repeat = :repeat WHERE id = :id",
+		sql.Named("date", task.Date),
+		sql.Named("title", task.Title),
+		sql.Named("comment", task.Comment),
+		sql.Named("repeat", task.Repeat),
+		sql.Named("repeat", task.Id))
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	return rowsAffected, nil
+}
