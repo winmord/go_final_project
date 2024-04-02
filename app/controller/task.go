@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func AddTask(w http.ResponseWriter, r *http.Request) {
+func TaskAddPOST(w http.ResponseWriter, r *http.Request) {
 	var taskData model.Task
 	var buffer bytes.Buffer
 
@@ -96,4 +96,16 @@ func AddTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Errorf("writing task id error: %w", err).Error(), http.StatusBadRequest)
 	}
+}
+
+func TasksReadGET(w http.ResponseWriter, _ *http.Request) {
+	tasks, err := database.ReadTasks()
+	if err != nil {
+		http.Error(w, fmt.Errorf("writing task id error: %w", err).Error(), http.StatusBadRequest)
+	}
+
+	tasksData, err := json.Marshal(model.Tasks{Tasks: tasks})
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusCreated)
+	_, err = w.Write(tasksData)
 }

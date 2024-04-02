@@ -13,3 +13,7 @@ type Task struct {
 type TaskIdResponse struct {
 	Id int `json:"id"`
 }
+
+type Tasks struct {
+	Tasks []Task `json:"tasks"`
+}

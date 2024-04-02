@@ -82,3 +82,22 @@ func InsertTask(task model.Task) (int, error) {
 
 	return int(id), nil
 }
+
+func ReadTasks() ([]model.Task, error) {
+	res, err := db.Query("SELECT * FROM scheduler")
+	if err != nil {
+		return []model.Task{}, err
+	}
+
+	tasks := []model.Task{}
+	for res.Next() {
+		task := model.Task{}
+		err := res.Scan(&task.Id, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+		if err != nil {
+			return tasks, err
+		}
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
+}

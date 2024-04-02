@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func GetNextDate(w http.ResponseWriter, r *http.Request) {
+func NextDateReadGET(w http.ResponseWriter, r *http.Request) {
 	now, err := time.Parse(model.DatePattern, r.FormValue("now"))
 	if err != nil {
 		http.Error(w, fmt.Sprintf(""), http.StatusBadRequest)

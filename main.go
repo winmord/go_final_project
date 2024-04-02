@@ -30,8 +30,9 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Mount("/", http.FileServer(http.Dir(webDir)))
-	r.Get("/api/nextdate", controller.GetNextDate)
-	r.Post("/api/task", controller.AddTask)
+	r.Get("/api/nextdate", controller.NextDateReadGET)
+	r.Post("/api/task", controller.TaskAddPOST)
+	r.Get("/api/tasks", controller.TasksReadGET)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
 	if err != nil {
