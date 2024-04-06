@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"main/app/controller"
+	"main/app/middleware"
 	"main/app/shared/database"
 	"net/http"
 	"os"
@@ -31,12 +32,13 @@ func main() {
 	r := chi.NewRouter()
 	r.Mount("/", http.FileServer(http.Dir(webDir)))
 	r.Get("/api/nextdate", controller.NextDateReadGET)
-	r.Post("/api/task", controller.TaskAddPOST)
-	r.Get("/api/tasks", controller.TasksReadGET)
-	r.Get("/api/task", controller.TaskReadGET)
-	r.Put("/api/task", controller.TaskUpdatePUT)
-	r.Post("/api/task/done", controller.TaskDonePOST)
-	r.Delete("/api/task", controller.TaskDELETE)
+	r.Post("/api/task", middleware.Auth(controller.TaskAddPOST))
+	r.Get("/api/tasks", middleware.Auth(controller.TasksReadGET))
+	r.Get("/api/task", middleware.Auth(controller.TaskReadGET))
+	r.Put("/api/task", middleware.Auth(controller.TaskUpdatePUT))
+	r.Post("/api/task/done", middleware.Auth(controller.TaskDonePOST))
+	r.Delete("/api/task", middleware.Auth(controller.TaskDELETE))
+	r.Post("/api/signin", controller.SignInPOST)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
 	if err != nil {
