@@ -84,7 +84,7 @@ func InsertTask(task model.Task) (int, error) {
 func ReadTasks() ([]model.Task, error) {
 	var tasks []model.Task
 
-	rows, err := db.Query("SELECT * FROM scheduler")
+	rows, err := db.Query("SELECT * FROM scheduler ORDER BY date")
 	if err != nil {
 		return []model.Task{}, err
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"main/app/controller"
 	"main/app/middleware"
 	"main/app/shared/database"
@@ -40,8 +41,7 @@ func main() {
 	r.Delete("/api/task", middleware.Auth(controller.TaskDELETE))
 	r.Post("/api/signin", controller.SignInPOST)
 
-	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
-	if err != nil {
-		panic(err)
-	}
+	serverPort := getPort()
+	log.Println(fmt.Sprintf("Server started on port: %d", serverPort))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", serverPort), r))
 }

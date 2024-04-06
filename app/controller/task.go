@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"main/app/model"
 	"main/app/service"
 	"main/app/shared/database"
@@ -75,6 +76,7 @@ func TaskAddPOST(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
 	_, err = w.Write(taskIdData)
+	log.Println(fmt.Sprintf("Added task with id=%d", taskId))
 
 	if err != nil {
 		responseWithError(w, "writing task id error", err)
@@ -106,6 +108,7 @@ func TasksReadGET(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(tasksData)
+	log.Println(fmt.Sprintf("Read %d tasks", len(tasks)))
 
 	if err != nil {
 		responseWithError(w, "writing tasks error", err)
@@ -125,6 +128,7 @@ func TaskReadGET(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(tasksData)
+	log.Println(fmt.Sprintf("Read task with id=%s", id))
 
 	if err != nil {
 		responseWithError(w, "writing task error", err)
@@ -132,7 +136,7 @@ func TaskReadGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func TaskUpdatePUT(w http.ResponseWriter, r *http.Request) {
-	var taskData model.Task
+	var task model.Task
 	var buffer bytes.Buffer
 
 	if _, err := buffer.ReadFrom(r.Body); err != nil {
@@ -140,48 +144,49 @@ func TaskUpdatePUT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.Unmarshal(buffer.Bytes(), &taskData); err != nil {
+	if err := json.Unmarshal(buffer.Bytes(), &task); err != nil {
 		responseWithError(w, "JSON encoding error", err)
 		return
 	}
 
-	if len(taskData.Id) == 0 {
+	if len(task.Id) == 0 {
 		responseWithError(w, "invalid id", errors.New("id is empty"))
 		return
 	}
 
-	if _, err := strconv.Atoi(taskData.Id); err != nil {
+	if _, err := strconv.Atoi(task.Id); err != nil {
 		responseWithError(w, "invalid id", err)
 		return
 	}
 
-	if _, err := time.Parse(model.DatePattern, taskData.Date); err != nil {
+	if _, err := time.Parse(model.DatePattern, task.Date); err != nil {
 		responseWithError(w, "invalid date", err)
 		return
 	}
 
-	if len(taskData.Title) == 0 {
+	if len(task.Title) == 0 {
 		responseWithError(w, "invalid title", errors.New("title is empty"))
 		return
 	}
 
-	if len(taskData.Repeat) > 0 {
-		if _, err := service.NextDate(time.Now(), taskData.Date, taskData.Repeat); err != nil {
+	if len(task.Repeat) > 0 {
+		if _, err := service.NextDate(time.Now(), task.Date, task.Repeat); err != nil {
 			responseWithError(w, "invalid repeat format", errors.New("no such format"))
 			return
 		}
 	}
 
-	_, err := database.UpdateTask(taskData)
+	_, err := database.UpdateTask(task)
 	if err != nil {
 		responseWithError(w, "invalid title", errors.New("failed to update task"))
 		return
 	}
 
-	taskIdData, err := json.Marshal(taskData)
+	taskIdData, err := json.Marshal(task)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(taskIdData)
+	log.Println(fmt.Sprintf("Updated task with id=%s", task.Id))
 
 	if err != nil {
 		responseWithError(w, "updating task error", err)
@@ -220,6 +225,7 @@ func TaskDonePOST(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(tasksData)
+	log.Println(fmt.Sprintf("Done task with id=%s", task.Id))
 
 	if err != nil {
 		responseWithError(w, "writing task error", err)
@@ -239,6 +245,7 @@ func TaskDELETE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(tasksData)
+	log.Println(fmt.Sprintf("Deleted task with id=%s", id))
 
 	if err != nil {
 		responseWithError(w, "writing task error", err)
