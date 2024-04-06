@@ -35,6 +35,8 @@ func main() {
 	r.Get("/api/tasks", controller.TasksReadGET)
 	r.Get("/api/task", controller.TaskReadGET)
 	r.Put("/api/task", controller.TaskUpdatePUT)
+	r.Post("/api/task/done", controller.TaskDonePOST)
+	r.Delete("/api/task", controller.TaskDELETE)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%d", getPort()), r)
 	if err != nil {

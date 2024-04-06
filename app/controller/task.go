@@ -6,41 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"main/app/model"
+	"main/app/service"
 	"main/app/shared/database"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 )
 
-func validateTask(task model.Task) error {
-	if len(task.Date) == 0 {
-		task.Date = time.Now().Format(model.DatePattern)
-	}
+func responseWithError(w http.ResponseWriter, errorText string, err error) {
+	errorResponse := model.ErrorResponse{
+		Error: fmt.Errorf("%s: %w", errorText, err).Error()}
+	errorData, _ := json.Marshal(errorResponse)
+	w.WriteHeader(http.StatusBadRequest)
+	_, err = w.Write(errorData)
 
-	date, err := time.Parse(model.DatePattern, task.Date)
 	if err != nil {
-		return err
+		http.Error(w, fmt.Errorf("error: %w", err).Error(), http.StatusBadRequest)
 	}
-
-	if date.Before(time.Now()) {
-		task.Date = time.Now().Format(model.DatePattern)
-	}
-
-	if len(task.Title) == 0 {
-		return errors.New("title can not be empty")
-	}
-
-	if len(task.Repeat) > 0 {
-		dayRepeatRule, _ := regexp.MatchString(`d \d+`, task.Repeat)
-		yearRepeatRule, _ := regexp.MatchString(`y`, task.Repeat)
-
-		if !dayRepeatRule && !yearRepeatRule {
-			return errors.New("bad repeat format")
-		}
-	}
-
-	return nil
 }
 
 func TaskAddPOST(w http.ResponseWriter, r *http.Request) {
@@ -48,29 +30,44 @@ func TaskAddPOST(w http.ResponseWriter, r *http.Request) {
 	var buffer bytes.Buffer
 
 	if _, err := buffer.ReadFrom(r.Body); err != nil {
-		http.Error(w, fmt.Errorf("body getting error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "body getting error", err)
 		return
 	}
 
 	if err := json.Unmarshal(buffer.Bytes(), &taskData); err != nil {
-		http.Error(w, fmt.Errorf("JSON encoding error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "JSON encoding error", err)
 		return
 	}
 
-	err := validateTask(taskData)
-	if err != nil {
-		taskIdData, err := json.Marshal(model.ErrorResponse{Error: fmt.Errorf("%w", err).Error()})
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write(taskIdData)
+	if len(taskData.Date) == 0 {
+		taskData.Date = time.Now().Format(model.DatePattern)
+	} else {
+		date, err := time.Parse(model.DatePattern, taskData.Date)
 		if err != nil {
-			http.Error(w, fmt.Errorf("%w", err).Error(), http.StatusBadRequest)
+			responseWithError(w, "bad data format", err)
+			return
+		}
+
+		if date.Before(time.Now()) {
+			taskData.Date = time.Now().Format(model.DatePattern)
+		}
+	}
+
+	if len(taskData.Title) == 0 {
+		responseWithError(w, "invalid title", errors.New("title is empty"))
+		return
+	}
+
+	if len(taskData.Repeat) > 0 {
+		if _, err := service.NextDate(time.Now(), taskData.Date, taskData.Repeat); err != nil {
+			responseWithError(w, "invalid repeat format", errors.New("no such format"))
+			return
 		}
 	}
 
 	taskId, err := database.InsertTask(taskData)
 	if err != nil {
-		http.Error(w, fmt.Errorf("failed to create task: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "failed to create task", err)
 		return
 	}
 
@@ -78,38 +75,60 @@ func TaskAddPOST(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
 	_, err = w.Write(taskIdData)
+
 	if err != nil {
-		http.Error(w, fmt.Errorf("writing task id error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "writing task id error", err)
 	}
 }
 
-func TasksReadGET(w http.ResponseWriter, _ *http.Request) {
-	tasks, err := database.ReadTasks()
-	if err != nil {
-		http.Error(w, fmt.Errorf("writing task id error: %w", err).Error(), http.StatusBadRequest)
+func TasksReadGET(w http.ResponseWriter, r *http.Request) {
+	search := r.URL.Query().Get("search")
+
+	var tasks []model.Task
+
+	if len(search) > 0 {
+		date, err := time.Parse("02.01.2006", search)
+		if err != nil {
+			tasks, err = database.SearchTasks(search)
+		} else {
+			tasks, err = database.SearchTasksByDate(date.Format(model.DatePattern))
+		}
+	} else {
+		err := errors.New("")
+		tasks, err = database.ReadTasks()
+		if err != nil {
+			responseWithError(w, "failed to get tasks", err)
+			return
+		}
 	}
 
 	tasksData, err := json.Marshal(model.Tasks{Tasks: tasks})
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(tasksData)
+
+	if err != nil {
+		responseWithError(w, "writing tasks error", err)
+	}
 }
 
 func TaskReadGET(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
+
 	task, err := database.ReadTask(id)
 	if err != nil {
-		errorData, _ := json.Marshal(model.ErrorResponse{Error: fmt.Errorf("%w", err).Error()})
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write(errorData)
+		responseWithError(w, "failed to get task", err)
 		return
 	}
 
-	taskData, err := json.Marshal(task)
+	tasksData, err := json.Marshal(task)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(taskData)
+	_, err = w.Write(tasksData)
+
+	if err != nil {
+		responseWithError(w, "writing task error", err)
+	}
 }
 
 func TaskUpdatePUT(w http.ResponseWriter, r *http.Request) {
@@ -117,38 +136,45 @@ func TaskUpdatePUT(w http.ResponseWriter, r *http.Request) {
 	var buffer bytes.Buffer
 
 	if _, err := buffer.ReadFrom(r.Body); err != nil {
-		http.Error(w, fmt.Errorf("body getting error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "body getting error", err)
 		return
 	}
 
 	if err := json.Unmarshal(buffer.Bytes(), &taskData); err != nil {
-		http.Error(w, fmt.Errorf("JSON encoding error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "JSON encoding error", err)
+		return
+	}
+
+	if len(taskData.Id) == 0 {
+		responseWithError(w, "invalid id", errors.New("id is empty"))
 		return
 	}
 
 	if _, err := strconv.Atoi(taskData.Id); err != nil {
-		errorData, _ := json.Marshal(model.ErrorResponse{Error: fmt.Errorf("%w", err).Error()})
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write(errorData)
+		responseWithError(w, "invalid id", err)
 		return
 	}
 
-	err := validateTask(taskData)
+	if _, err := time.Parse(model.DatePattern, taskData.Date); err != nil {
+		responseWithError(w, "invalid date", err)
+		return
+	}
+
+	if len(taskData.Title) == 0 {
+		responseWithError(w, "invalid title", errors.New("title is empty"))
+		return
+	}
+
+	if len(taskData.Repeat) > 0 {
+		if _, err := service.NextDate(time.Now(), taskData.Date, taskData.Repeat); err != nil {
+			responseWithError(w, "invalid repeat format", errors.New("no such format"))
+			return
+		}
+	}
+
+	_, err := database.UpdateTask(taskData)
 	if err != nil {
-		errorData, _ := json.Marshal(model.ErrorResponse{Error: fmt.Errorf("%w", err).Error()})
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write(errorData)
-		return
-	}
-
-	affected, err := database.UpdateTask(taskData)
-	if affected == 0 || err != nil {
-		errorData, _ := json.Marshal(model.ErrorResponse{Error: fmt.Errorf("%w", err).Error()})
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write(errorData)
+		responseWithError(w, "invalid title", errors.New("failed to update task"))
 		return
 	}
 
@@ -156,7 +182,66 @@ func TaskUpdatePUT(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(taskIdData)
+
 	if err != nil {
-		http.Error(w, fmt.Errorf("writing task id error: %w", err).Error(), http.StatusBadRequest)
+		responseWithError(w, "updating task error", err)
+		return
+	}
+}
+
+func TaskDonePOST(w http.ResponseWriter, r *http.Request) {
+	task, err := database.ReadTask(r.URL.Query().Get("id"))
+	if err != nil {
+		responseWithError(w, "failed to get task", err)
+		return
+	}
+
+	if len(task.Repeat) == 0 {
+		err = database.DeleteTaskDb(task.Id)
+		if err != nil {
+			responseWithError(w, "failed to delete task", err)
+			return
+		}
+	} else {
+		task.Date, err = service.NextDate(time.Now(), task.Date, task.Repeat)
+		if err != nil {
+			responseWithError(w, "failed to get next date", err)
+			return
+		}
+
+		_, err = database.UpdateTask(task)
+		if err != nil {
+			responseWithError(w, "failed to update task", err)
+			return
+		}
+	}
+
+	tasksData, err := json.Marshal(struct{}{})
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(tasksData)
+
+	if err != nil {
+		responseWithError(w, "writing task error", err)
+	}
+}
+
+func TaskDELETE(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+
+	err := database.DeleteTaskDb(id)
+	if err != nil {
+		responseWithError(w, "failed to delete task", err)
+		return
+	}
+
+	tasksData, err := json.Marshal(struct{}{})
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(tasksData)
+
+	if err != nil {
+		responseWithError(w, "writing task error", err)
+		return
 	}
 }
